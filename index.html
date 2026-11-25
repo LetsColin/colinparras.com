@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LetsColinTV</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Flex:opsz,wdth,wght@8..144,25..151,100..1000&family=Unbounded:wght@900&family=JetBrains+Mono:wght@400;500;800&display=swap" rel="stylesheet">
+<style>
+/*
+VOICE: nächtliches Labor für Schrift – jedes Wort wird zum Spielzeug
+IDEA: ein Schaukasten mit elf Exponaten, das Wort ist immer dasselbe, das Material wechselt
+PICTURE: Vollbild-Bühne mit elf Materialien – Wasser, Raster, Tiefe, Glas, Relief, Licht, Magnet, Kacheln, Gummi, ASCII, Glitch
+COLOUR and TYPE: Schwarz, Weiß, Farbe nur bei Berührung; Roboto Flex (variabel), Unbounded 900, JetBrains Mono
+LAYOUT: Bühne füllt alles, unten Effekt-Leiste und Wortfeld, oben eine Zeile Erklärung
+*/
+:root{color-scheme:dark;--ink:#f5f5f5;--dim:#8a8a8a;--line:#2a2a2a}
+*{box-sizing:border-box;min-width:0}
+html,body{height:100%}
+body{margin:0;background:#000;color:var(--ink);font:15px/1.5 "JetBrains Mono",ui-monospace,monospace;overflow:hidden}
+#stage{position:fixed;inset:0;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
+#stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.hint{position:fixed;top:max(16px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);width:max-content;max-width:calc(100% - 32px);margin:0;padding:6px 14px;border-radius:14px;background:rgba(0,0,0,.6);backdrop-filter:blur(6px);text-align:center;color:#bdbdbd;font-size:13px;pointer-events:none;text-wrap:balance;z-index:2}
+.bar{position:fixed;left:50%;bottom:max(22px,env(safe-area-inset-bottom));transform:translateX(-50%);width:min(1000px,calc(100% - 24px));display:flex;flex-direction:column;align-items:center;gap:10px;z-index:2}
+.tabs{display:flex;gap:4px;overflow-x:auto;max-width:100%;padding:4px;border:1px solid var(--line);border-radius:999px;background:rgba(0,0,0,.7);backdrop-filter:blur(8px);scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{flex:none;min-height:40px;padding:0 12px;border-radius:999px;border:0;background:none;color:var(--dim);font:inherit;font-size:14px;cursor:pointer}
+.tab:hover{color:var(--ink)}
+.new{font-size:10px;margin-left:6px;padding:1px 5px;border-radius:6px;background:#ff3b6b;color:#fff;vertical-align:2px}
+@media(min-width:900px){.tabs{flex-wrap:wrap;justify-content:center;border-radius:26px}}
+.tab[aria-selected=true]{background:#f5f5f5;color:#000}
+.word{display:flex;align-items:center;gap:8px;width:min(420px,100%);border:1px solid var(--line);border-radius:999px;padding:0 5px 0 16px;background:rgba(0,0,0,.7);backdrop-filter:blur(8px)}
+.word:focus-within{border-color:#666}
+.word input{flex:1;min-height:44px;background:none;border:0;color:var(--ink);font:inherit;font-size:16px;outline:none}
+.btn{min-height:36px;border-radius:999px;border:1px solid var(--line);background:#111;color:var(--ink);font:inherit;font-size:13px;padding:0 14px;cursor:pointer}
+.btn:hover{background:#1d1d1d}
+.tab:focus-visible,.btn:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.gummi,.glitch{position:absolute;inset:0 0 12vh;display:flex;align-items:center;justify-content:center;white-space:nowrap;line-height:1;color:#fff}
+.tools{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px 16px;padding:6px 12px;border:1px solid var(--line);border-radius:26px;background:rgba(0,0,0,.7);backdrop-filter:blur(8px);max-width:100%}
+.chips{display:flex;flex-wrap:wrap;justify-content:center;gap:6px}
+.chip{width:34px;height:34px;padding:0;border-radius:999px;border:1px solid var(--line);background:#111;position:relative;cursor:pointer}
+.chip span{position:absolute;inset:5px;border-radius:999px}
+.chip[aria-pressed=true]{border-color:#eee}
+.chip:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.size{display:flex;align-items:center;gap:8px;color:var(--dim);font-size:13px}
+.size input{width:140px;height:36px;accent-color:#fff;cursor:pointer}
+.size output{min-width:3.2em;color:var(--ink);font-variant-numeric:tabular-nums}
+.bar{transition:opacity .6s}.bar.quiet{opacity:.3}.bar.quiet:hover,.bar.quiet:focus-within{opacity:1}
+.gummi{font-family:"Roboto Flex",sans-serif}
+.gummi span{display:inline-block}
+.glitch{font-family:"JetBrains Mono",monospace;font-weight:800;letter-spacing:-.02em}
+.glitch span.on{color:#05d9e8}
+.scene{position:absolute;inset:0 0 12vh;display:grid;place-items:center;perspective:1000px}
+.rig{position:relative;transform-style:preserve-3d;font-family:Unbounded,sans-serif;font-weight:900;line-height:1.1;white-space:nowrap}
+.layer{position:absolute;inset:0}
+.layer:first-child{position:relative}
+</style>
+</head>
+<body>
+<div id="stage" aria-label="Interaktiver Schrifteffekt"></div>
+<p class="hint" id="desc"></p>
+<nav class="bar" id="bar">
+  <div class="tabs" id="tabs" role="tablist" aria-label="Stil wählen"></div>
+  <div class="tools">
+    <div class="chips" id="chips" role="group" aria-label="Farbverlauf"></div>
+    <label class="size">Wegstoß <input type="range" id="boost" min="0.2" max="3" step="0.1" value="1" aria-label="Stärke des Wegstoß-Effekts"> <output id="boostOut">1.0×</output></label>
+  </div>
+  <form class="word" id="f">
+    <input id="w" maxlength="14" autocomplete="off" spellcheck="false" aria-label="Eigenes Wort" value="">
+    <button class="btn" type="submit">Setzen</button>
+  </form>
+</nav>
+
+<script>
+{
+/* ======================= EINSTELLUNGEN – hier anpassen =======================
+   wort:         Text des Schriftzugs (max. 14 Zeichen)
+   stil:         Start-Stil: partikel, wasser, raster, tiefe, glas, relief,
+                 licht, magnet, kacheln, gummi, ascii, glitch
+   farbe:        neon, glut, eis, gift, abend, ozean, lava, aurora, kirsch,
+                 gold, bonbon, silber, regenbogen
+   staerke:      Wegstoß-Effekt, 0.2 (schwach) bis 3 (stark)
+   bedienleiste: true = Besucher können Stil, Farbe und Wegstoß ändern
+   worteingabe:  true = Besucher können auch den Text ändern
+   ============================================================================ */
+const CONFIG = {
+  wort: 'LetsColinTV',
+  stil: 'partikel',
+  farbe: 'neon',
+  staerke: 1,
+  bedienleiste: true,
+  worteingabe: false
+};
+const $ = s => document.querySelector(s);
+const stage = $('#stage'), desc = $('#desc'), tabs = $('#tabs'), input = $('#w');
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const clamp = (v,a,b) => v < a ? a : v > b ? b : v;
+const now = () => performance.now();
+let word = CONFIG.wort || 'hallo';
+const PALETTES = {
+  neon: [[255,63,216],[168,85,247],[34,229,201]],
+  glut: [[255,214,10],[255,94,58],[214,30,90]],
+  eis:  [[220,245,255],[80,170,255],[40,70,230]],
+  gift: [[200,255,60],[30,230,120],[0,170,190]],
+  abend: [[255,200,90],[255,90,120],[120,60,200]],
+  ozean: [[0,255,220],[0,150,255],[20,40,160]],
+  lava: [[255,240,120],[255,80,0],[150,0,0]],
+  aurora: [[80,255,160],[60,180,255],[180,80,255]],
+  kirsch: [[255,190,210],[255,60,120],[160,0,70]],
+  gold: [[255,245,190],[255,200,60],[200,120,20]],
+  bonbon: [[120,255,255],[255,120,220],[255,230,120]],
+  silber: [[255,255,255],[170,175,190],[95,100,115]],
+  regenbogen: [[255,60,60],[255,160,40],[255,235,60],[60,220,100],[50,150,255],[170,80,255]]
+};
+let pal = PALETTES[CONFIG.farbe] ? CONFIG.farbe : 'neon';
+let boost = clamp(+CONFIG.staerke || 1, .2, 3);
+const soft = () => .5 + .5*boost;                       // für Radien: wächst langsamer als die Kraft
+function pc(t){                                          // Farbe an Stelle t (0–1) im gewählten Verlauf
+  const c = PALETTES[pal]; t = clamp(t, 0, 1);
+  const seg = Math.min(c.length - 2, Math.floor(t*(c.length - 1))), u = t*(c.length - 1) - seg, a = c[seg], b = c[seg + 1];
+  return a.map((v, i) => Math.round(v + (b[i] - v)*u));
+}
+const rgb = (c, k = 1) => `rgb(${(c[0]*k)|0},${(c[1]*k)|0},${(c[2]*k)|0})`;
+const pcs = (t, k = 1) => rgb(pc(t), k);
+const toWhite = (c, u) => `rgb(${(255 + (c[0] - 255)*u)|0},${(255 + (c[1] - 255)*u)|0},${(255 + (c[2] - 255)*u)|0})`;
+function stops(g, light = 0){ const c = PALETTES[pal]; c.forEach((v, i) => g.addColorStop(i/(c.length - 1), toWhite(v, 1 - light))); return g; }
+
+// Gemeinsamer Zeiger: echte Maus/Finger, sonst ein "Geist", der langsam übers Wort streift
+const P = {x:-1e4, y:-1e4, on:false, last:-1e9, vx:0, vy:0};
+function ptr(t){
+  if (P.on || now() - P.last < 3500) return {x:P.x, y:P.y, on:P.on, s:1};
+  if (reduce) return {x:-1e4, y:-1e4, on:false, s:0};
+  const w = stage.clientWidth, h = stage.clientHeight;
+  return {x:w/2 + Math.sin(t*.5)*w*.34, y:h*.45 + Math.sin(t*1.2)*h*.1, on:true, s:.6, ghost:true};
+}
+function fitFont(x, w, h, family, weight, max){
+  const f = s => `${weight} ${s}px ${family}, sans-serif`;
+  let size = Math.min(h*.34, max); x.font = f(size);
+  const tw = x.measureText(word).width; if (tw > w*.86) size *= w*.86/tw;
+  x.font = f(size); return size;
+}
+function mk(w, h){
+  const c = document.createElement('canvas'); c.width = Math.max(1, w|0); c.height = Math.max(1, h|0);
+  return [c, c.getContext('2d', {willReadFrequently:true})];
+}
+// Wort unsichtbar auf eine Hilfsfläche zeichnen
+function textCanvas(w, h, color){
+  const [c, x] = mk(w, h);
+  fitFont(x, w, h, 'Unbounded', 900, 260);
+  x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillStyle = color; x.fillText(word, w/2, h*.45);
+  return c;
+}
+// Deckkraft jedes Pixels des Wortes (0–255)
+function mask(w, h){
+  const d = textCanvas(w, h, '#fff').getContext('2d').getImageData(0,0,w,h).data, a = new Uint8Array(w*h);
+  for (let i = 0; i < a.length; i++) a[i] = d[i*4+3];
+  return a;
+}
+function canvasIn(el){
+  const W = el.clientWidth, H = el.clientHeight, dpr = Math.min(devicePixelRatio || 1, 2);
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(W*dpr)); c.height = Math.max(1, Math.round(H*dpr));
+  el.appendChild(c);
+  const ctx = c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+  return {ctx, W, H, dpr};
+}
+const letters = () => [...word];
+
+const EFFECTS = {
+  // Partikel — tausende Pixel bilden das Wort und weichen dem Cursor farbig aus
+  partikel: {label:'Partikel', desc:'Fahr mit der Maus oder dem Finger über das Wort', mount(el){
+    const {ctx, W, H} = canvasIn(el), m = mask(W, H), parts = [];
+    const target = Math.floor(7000*Math.sqrt(W*H/2073600)*Math.min(2, Math.sqrt(Math.max(1, [...word].length/5))));
+    const spawn = () => {
+      for (let i = 0; i < 120; i++){
+        const x = Math.random()*W|0, y = Math.random()*H|0;
+        if (m[y*W + x] > 128) return {x, y, bx:x, by:y, s:Math.random() + .6, col:pcs(x/W), life:Math.random()*100 + 50};
+      }
+      return null;
+    };
+    for (let i = 0; i < target*1.2 && parts.length < target; i++){ const q = spawn(); if (q) parts.push(q); }
+    return {
+      frame(t){
+        const p = ptr(t), R = Math.max(140, Math.min(W,H)*.22)*soft(), PUSH = 84*boost;
+        ctx.fillStyle = '#000'; ctx.fillRect(0,0,W,H);
+        for (let i = 0; i < parts.length; i++){
+          const q = parts[i], dx = p.x - q.bx, dy = p.y - q.by, d = Math.hypot(dx, dy);
+          if (p.on && d < R){
+            const f = (R - d)/R*p.s, a = Math.atan2(dy, dx);
+            q.x += (q.bx - Math.cos(a)*f*PUSH - q.x)*.35; q.y += (q.by - Math.sin(a)*f*PUSH - q.y)*.35;
+            ctx.fillStyle = q.col;
+          } else {
+            q.x += (q.bx - q.x)*.1; q.y += (q.by - q.y)*.1;
+            ctx.fillStyle = '#fff';
+          }
+          ctx.fillRect(q.x, q.y, q.s, q.s);
+          if (!reduce && --q.life <= 0){ const n = spawn(); if (n) parts[i] = n; else { parts.splice(i, 1); i--; } }
+        }
+        while (parts.length < target){ const n = spawn(); if (!n) break; parts.push(n); }
+      }
+    };
+  }},
+
+  // Wasser — Schwimmbecken: Wellengleichung, Lichtbrechung mit Farbsäumen, Kaustiken, Glanzlichter
+  wasser: {label:'Wasser', desc:'Ein Schwimmbecken, dein Wort am Boden · zieh Wellen, klick für einen großen Tropfen', mount(el){
+    const W = el.clientWidth, H = el.clientHeight, q = W*H > 1.2e6 ? 2 : 1.5;
+    const sw = Math.max(8, Math.round(W/q)), sh = Math.max(8, Math.round(H/q));
+    const c = document.createElement('canvas'); c.width = sw; c.height = sh; el.appendChild(c);
+    const ctx = c.getContext('2d');
+    const fc = document.createElement('canvas'); fc.width = sw; fc.height = sh;
+    const fx = fc.getContext('2d', {willReadFrequently:true});
+    let g = fx.createLinearGradient(0,0,0,sh); g.addColorStop(0,'#4fd0dc'); g.addColorStop(1,'#0b6a88');
+    fx.fillStyle = g; fx.fillRect(0,0,sw,sh);
+    const ts = Math.max(7, Math.round(sw/36));
+    for (let y = 0; y < sh; y += ts) for (let x = 0; x < sw; x += ts){
+      fx.fillStyle = `rgba(${Math.random() < .5 ? '255,255,255' : '0,40,70'},${(Math.random()*.07).toFixed(3)})`;
+      fx.fillRect(x, y, ts, ts);
+    }
+    fx.fillStyle = 'rgba(255,255,255,.24)';
+    for (let x = 0; x < sw; x += ts) fx.fillRect(x, 0, 1, sh);
+    for (let y = 0; y < sh; y += ts) fx.fillRect(0, y, sw, 1);
+    fx.fillStyle = 'rgba(0,50,80,.2)';
+    for (let x = 1; x < sw; x += ts) fx.fillRect(x, 0, 1, sh);
+    for (let y = 1; y < sh; y += ts) fx.fillRect(0, y, sw, 1);
+    fitFont(fx, sw, sh, 'Unbounded', 900, 260/q);
+    fx.textAlign = 'center'; fx.textBaseline = 'middle';
+    fx.fillStyle = '#0a2c55'; fx.fillText(word, sw/2, sh*.45);
+    g = fx.createRadialGradient(sw/2, sh*.45, Math.min(sw,sh)*.2, sw/2, sh*.45, Math.max(sw,sh)*.75);
+    g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,'rgba(0,20,45,.6)');
+    fx.fillStyle = g; fx.fillRect(0,0,sw,sh);
+    const src = fx.getImageData(0,0,sw,sh).data, out = ctx.createImageData(sw,sh), o = out.data;
+    o.set(src);
+    let a = new Float32Array(sw*sh), b = new Float32Array(sw*sh), lx = null, ly = 0, tick = 0;
+    const drop = (x, y, r, s) => {
+      x |= 0; y |= 0;
+      for (let j = -r; j <= r; j++) for (let i = -r; i <= r; i++){
+        const d = Math.hypot(i,j), X = x+i, Y = y+j;
+        if (d > r || X < 1 || Y < 1 || X >= sw-1 || Y >= sh-1) continue;
+        a[Y*sw+X] += s*(.5 + .5*Math.cos(Math.PI*d/r));
+      }
+    };
+    const at = (x, y) => {
+      x = x < 0 ? 0 : x > sw-1 ? sw-1 : x|0; y = y < 0 ? 0 : y > sh-1 ? sh-1 : y|0;
+      return (y*sw + x)*4;
+    };
+    return {
+      frame(t){
+        const p = ptr(t);
+        if (p.on){
+          const x = p.x/q, y = p.y/q;
+          if (lx !== null){
+            const d = Math.hypot(x-lx, y-ly), n = Math.min(12, Math.ceil(d/3));
+            const amp = Math.min(200, 25 + d*8)*(p.ghost ? .45 : 1)*boost;
+            for (let k = 1; k <= n; k++) drop(lx + (x-lx)*k/n, ly + (y-ly)*k/n, 3, amp*.5);
+          }
+          lx = x; ly = y;
+        } else lx = null;
+        if (!reduce){
+          for (let k = 0; k < 4; k++) drop(Math.random()*sw, Math.random()*sh, 2, 12);
+          if (++tick % 80 === 0) drop(Math.random()*sw, Math.random()*sh, 2, 240);
+        }
+        for (let y = 1; y < sh-1; y++){
+          let i = y*sw + 1;
+          for (let x = 1; x < sw-1; x++, i++) b[i] = ((a[i-1] + a[i+1] + a[i-sw] + a[i+sw])*.5 - b[i])*.986;
+        }
+        const tmp = a; a = b; b = tmp;
+        for (let y = 1; y < sh-1; y++){
+          let i = y*sw + 1;
+          for (let x = 1; x < sw-1; x++, i++){
+            const l = a[i-1], r = a[i+1], u = a[i-sw], dn = a[i+sw];
+            const nx = l - r, ny = u - dn, lap = l + r + u + dn - 4*a[i];
+            const ox = nx*.16, oy = ny*.16;
+            const s = (nx + ny)*.5;
+            let L = lap < 0 ? -lap*.6 : lap*.12;
+            if (s > 5){ const sp = (s-5)*(s-5)*.06; L += sp > 150 ? 150 : sp; }
+            const k = i*4;
+            o[k]   = src[at(x + ox*.93, y + oy*.93)] + L;
+            o[k+1] = src[at(x + ox, y + oy) + 1] + L;
+            o[k+2] = src[at(x + ox*1.08, y + oy*1.08) + 2] + L*.92;
+          }
+        }
+        ctx.putImageData(out, 0, 0);
+      },
+      click(x, y){ drop(x/q, y/q, 11, 900); }
+    };
+  }},
+
+  // Glas — beschlagene Scheibe: freiwischen, Beschlag kehrt zurück, Tropfen laufen herunter
+  glas: {label:'Glas', isNew:true, desc:'Eine beschlagene Scheibe bei Nacht · wisch das Wort frei, der Beschlag kommt langsam zurück', mount(el){
+    const {ctx, W, H} = canvasIn(el);
+    const [scene, sx] = mk(W,H), [blur, bx] = mk(W,H), [M, mx] = mk(W,H), [tmp, tx] = mk(W,H);
+    let g = sx.createLinearGradient(0,0,0,H); g.addColorStop(0,'#140b1f'); g.addColorStop(1,'#06070d');
+    sx.fillStyle = g; sx.fillRect(0,0,W,H);
+    const cols = ['255,170,80','255,90,150','90,200,255','255,220,140'];
+    for (let i = 0; i < 48; i++){
+      const x = Math.random()*W, y = Math.random()*H, r = 12 + Math.random()*70, c = cols[i % 4];
+      const gr = sx.createRadialGradient(x,y,0,x,y,r);
+      gr.addColorStop(0, `rgba(${c},${(.25 + Math.random()*.4).toFixed(2)})`); gr.addColorStop(1, `rgba(${c},0)`);
+      sx.fillStyle = gr; sx.fillRect(x-r, y-r, 2*r, 2*r);
+    }
+    fitFont(sx, W, H, 'Unbounded', 900, 260); sx.textAlign = 'center'; sx.textBaseline = 'middle';
+    sx.shadowColor = '#ff4fa3'; sx.shadowBlur = 50; sx.fillStyle = '#ffd6ec'; sx.fillText(word, W/2, H*.45);
+    sx.shadowBlur = 16; sx.fillStyle = '#fff'; sx.fillText(word, W/2, H*.45); sx.shadowBlur = 0;
+    const [s1, s1x] = mk(Math.max(1, W/16|0), Math.max(1, H/16|0)), [s2, s2x] = mk(Math.max(1, W/4|0), Math.max(1, H/4|0));
+    s1x.drawImage(scene, 0, 0, s1.width, s1.height);
+    s2x.drawImage(s1, 0, 0, s2.width, s2.height);
+    bx.drawImage(s2, 0, 0, W, H);
+    bx.fillStyle = 'rgba(190,200,215,.16)'; bx.fillRect(0,0,W,H);
+    for (let i = 0, n = W*H/260; i < n; i++){
+      bx.fillStyle = `rgba(255,255,255,${(Math.random()*.14).toFixed(3)})`;
+      bx.beginPath(); bx.arc(Math.random()*W, Math.random()*H, Math.random()*1.6 + .3, 0, 6.283); bx.fill();
+    }
+    const R = clamp(Math.min(W,H)*.07, 26, 64), drops = [];
+    const wipe = (x, y, r) => {
+      const gr = mx.createRadialGradient(x,y,r*.35,x,y,r);
+      gr.addColorStop(0,'rgba(255,255,255,1)'); gr.addColorStop(1,'rgba(255,255,255,0)');
+      mx.fillStyle = gr; mx.fillRect(x-r, y-r, 2*r, 2*r);
+    };
+    let lx = null, ly = 0, tick = 0;
+    return {
+      frame(t){
+        const p = ptr(t);
+        if (!reduce && ++tick % 12 === 0){
+          mx.globalCompositeOperation = 'destination-out'; mx.fillStyle = 'rgba(0,0,0,.05)';
+          mx.fillRect(0,0,W,H); mx.globalCompositeOperation = 'source-over';
+        }
+        if (p.on){
+          const r = R*(p.ghost ? .7 : 1)*soft();
+          if (lx !== null){
+            const d = Math.hypot(p.x-lx, p.y-ly), n = Math.min(20, Math.ceil(d/(r*.25)));
+            for (let k = 1; k <= n; k++) wipe(lx + (p.x-lx)*k/n, ly + (p.y-ly)*k/n, r);
+          } else wipe(p.x, p.y, r);
+          lx = p.x; ly = p.y;
+          if (!reduce && Math.random() < .05 && drops.length < 40)
+            drops.push({x:p.x + (Math.random()-.5)*r*1.4, y:p.y + r*.6, v:0, r:1.6 + Math.random()*2.2, stop:0});
+        } else lx = null;
+        mx.fillStyle = '#fff';
+        for (let k = drops.length-1; k >= 0; k--){
+          const d = drops[k];
+          if (d.stop > 0) d.stop--;
+          else {
+            d.v = Math.min(2.4, d.v + .04 + Math.random()*.05);
+            if (Math.random() < .015){ d.stop = 20 + (Math.random()*50|0); d.v = 0; }
+            d.x += (Math.random()-.5)*.6; d.y += d.v;
+          }
+          mx.beginPath(); mx.arc(d.x, d.y, d.r*.9, 0, 6.283); mx.fill();
+          if (d.y > H + 10) drops.splice(k, 1);
+        }
+        ctx.drawImage(blur, 0, 0, W, H);
+        tx.globalCompositeOperation = 'source-over'; tx.clearRect(0,0,W,H); tx.drawImage(scene, 0, 0);
+        tx.globalCompositeOperation = 'destination-in'; tx.drawImage(M, 0, 0); tx.globalCompositeOperation = 'source-over';
+        ctx.drawImage(tmp, 0, 0, W, H);
+        for (const d of drops){
+          ctx.fillStyle = 'rgba(255,255,255,.18)'; ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, 6.283); ctx.fill();
+          ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.beginPath(); ctx.arc(d.x - d.r*.35, d.y - d.r*.35, d.r*.3, 0, 6.283); ctx.fill();
+        }
+      },
+      click(x, y){ wipe(x, y, R*2.2); }
+    };
+  }},
+
+  // Relief — Linienlandschaft: das Wort ist ein Gebirge, der Cursor hebt einen Hügel
+  relief: {label:'Relief', isNew:true, desc:'Linien wie eine Landschaft · das Wort ist ein Gebirge, der Cursor hebt einen Hügel, Klicken eine Welle', mount(el){
+    const {ctx, W, H} = canvasIn(el), m = mask(W, H);
+    const sp = clamp(Math.round(H/80), 6, 10), y0 = H*.1, y1 = H*.8, L = Math.floor((y1-y0)/sp), st = 4, NX = Math.ceil(W/st) + 1;
+    const base = new Float32Array(L*NX), noi = new Float32Array(L*NX);
+    for (let l = 0; l < L; l++){
+      const yl = y0 + l*sp;
+      for (let xi = 0; xi < NX; xi++){
+        const x = Math.min(W-1, xi*st); let s = 0, n = 0;
+        for (let j = -3; j <= 3; j++){
+          const Y = Math.round(yl + j*sp*.5); if (Y < 0 || Y >= H) continue;
+          for (let i = -1; i <= 1; i++){ s += m[Y*W + clamp(x + i*2, 0, W-1)]; n++; }
+        }
+        base[l*NX + xi] = n ? s/(n*255) : 0; noi[l*NX + xi] = Math.random();
+      }
+    }
+    const A = sp*4.2, waves = [];
+    const stroke = ctx.createLinearGradient(0,0,W,0);
+    stops(stroke, .6);
+    let sx = -1e4, sy = -1e4;
+    return {
+      frame(t){
+        const p = ptr(t);
+        if (p.on){ if (sx < -1e3){ sx = p.x; sy = p.y; } sx += (p.x-sx)*.15; sy += (p.y-sy)*.15; }
+        for (let w = waves.length-1; w >= 0; w--){ waves[w].r += 7; waves[w].s *= .975; if (waves[w].s < .03) waves.splice(w,1); }
+        const s2 = 2*Math.pow(Math.min(W,H)*.09, 2), amp = p.on ? p.s : 0;
+        ctx.fillStyle = '#000'; ctx.fillRect(0,0,W,H);
+        ctx.lineWidth = 1.4; ctx.lineJoin = 'round'; ctx.strokeStyle = stroke; ctx.fillStyle = '#000';
+        for (let l = 0; l < L; l++){
+          const yl = y0 + l*sp, line = new Path2D();
+          for (let xi = 0; xi < NX; xi++){
+            const x = xi*st, k = l*NX + xi;
+            let h = base[k]*A;
+            if (amp){ const dx = x - sx, dy = yl - sy; h += Math.exp(-(dx*dx + dy*dy)/s2)*A*1.3*amp*boost; }
+            for (const w of waves){ const gd = Math.hypot(x - w.x, yl - w.y) - w.r; h += Math.exp(-gd*gd/400)*A*w.s; }
+            if (!reduce) h += Math.sin(t*2.2 + noi[k]*6.283)*.6 + base[k]*Math.sin(t*1.3 + x*.02)*1.5;
+            xi ? line.lineTo(x, yl - h) : line.moveTo(x, yl - h);
+          }
+          const poly = new Path2D(line);
+          poly.lineTo(W + st, yl + sp*2); poly.lineTo(-st, yl + sp*2); poly.closePath();
+          ctx.fill(poly); ctx.stroke(line);
+        }
+      },
+      click(x, y){ waves.push({x, y, r:0, s:1.2}); }
+    };
+  }},
+
+  // Licht — du bist die Lampe: das Wort wirft einen Schatten an die Wand
+  licht: {label:'Licht', isNew:true, desc:'Du bist die Lampe · das Wort wirft Schatten an die Wand, Klicken wechselt die Lichtfarbe', mount(el){
+    const {ctx, W, H, dpr} = canvasIn(el);
+    const shadowFull = textCanvas(W, H, '#000'), side = textCanvas(W, H, '#2a2622'), face = textCanvas(W, H, '#fff');
+    const [tmp, tx] = mk(W, H), hw = Math.max(1, W/2|0), hh = Math.max(1, H/2|0);
+    const [shadow, shx] = mk(hw, hh), [layer, lyx] = mk(hw, hh);
+    shx.drawImage(shadowFull, 0, 0, hw, hh);
+    const LIGHTS = [pc(.5), [255,200,140], [150,210,255], [255,255,255]];
+    const cx = W/2, cy = H*.45, N = reduce ? 12 : 30;
+    let li = 0, lx = W/2, ly = H*.12;
+    return {
+      frame(t){
+        const p = ptr(t);
+        lx += ((p.on ? p.x : W/2) - lx)*.12; ly += ((p.on ? p.y : H*.12) - ly)*.12;
+        const [r, g, b] = LIGHTS[li], M = Math.max(W,H);
+        ctx.setTransform(dpr,0,0,dpr,0,0); ctx.globalAlpha = 1;
+        ctx.fillStyle = '#0b0a0d'; ctx.fillRect(0,0,W,H);
+        let gr = ctx.createRadialGradient(lx,ly,0,lx,ly,M*.8);
+        gr.addColorStop(0,`rgba(${r},${g},${b},.55)`); gr.addColorStop(.3,`rgba(${r},${g},${b},.16)`); gr.addColorStop(1,`rgba(${r},${g},${b},0)`);
+        ctx.fillStyle = gr; ctx.fillRect(0,0,W,H);
+        // Schatten in halber Auflösung berechnen (er ist ohnehin weich), dann einmal hochskalieren
+        lyx.setTransform(1,0,0,1,0,0); lyx.globalAlpha = 1; lyx.clearRect(0,0,hw,hh); lyx.globalAlpha = .07;
+        for (let s = 1; s <= N; s++){
+          const k = 1 + s/N*.45;
+          lyx.setTransform(k, 0, 0, k, lx/2*(1-k), ly/2*(1-k));
+          lyx.drawImage(shadow, 0, 0);
+        }
+        ctx.drawImage(layer, 0, 0, W, H);
+        const dx = cx - lx, dy = cy - ly, dl = Math.hypot(dx, dy) || 1;
+        for (let e = 7; e >= 1; e--) ctx.drawImage(side, dx/dl*e, dy/dl*e, W, H);
+        tx.globalCompositeOperation = 'source-over'; tx.clearRect(0,0,W,H); tx.drawImage(face, 0, 0);
+        tx.globalCompositeOperation = 'source-in';
+        gr = tx.createRadialGradient(lx,ly,0,lx,ly,M*.9);
+        gr.addColorStop(0,`rgb(${(255+r)/2|0},${(255+g)/2|0},${(255+b)/2|0})`);
+        gr.addColorStop(.45,`rgb(${r*.55|0},${g*.55|0},${b*.55|0})`); gr.addColorStop(1,'#1c1a18');
+        tx.fillStyle = gr; tx.fillRect(0,0,W,H); tx.globalCompositeOperation = 'source-over';
+        ctx.drawImage(tmp, 0, 0, W, H);
+        gr = ctx.createRadialGradient(lx,ly,0,lx,ly,46);
+        gr.addColorStop(0,'rgba(255,255,255,.95)'); gr.addColorStop(.25,`rgba(${r},${g},${b},.6)`); gr.addColorStop(1,`rgba(${r},${g},${b},0)`);
+        ctx.fillStyle = gr; ctx.fillRect(lx-46, ly-46, 92, 92);
+      },
+      click(){ li = (li + 1) % LIGHTS.length; }
+    };
+  }},
+
+  // Magnet — Eisenspäne auf Papier, der Cursor richtet sie aus
+  magnet: {label:'Magnet', isNew:true, desc:'Eisenspäne auf Papier · der Cursor ist ein Magnet, Klicken polt ihn um', mount(el){
+    const {ctx, W, H} = canvasIn(el), m = mask(W, H), g = clamp(Math.round(W/100), 8, 13);
+    const cols = Math.ceil(W/g), rows = Math.ceil(H/g), n = cols*rows;
+    const cov = new Float32Array(n), base = new Float32Array(n), ang = new Float32Array(n);
+    const at = (x, y) => m[clamp(y|0, 0, H-1)*W + clamp(x|0, 0, W-1)]/255;
+    for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++){
+      const i = y*cols + x, cx = x*g + g/2, cy = y*g + g/2, o = g/3;
+      cov[i] = (at(cx,cy) + at(cx-o,cy) + at(cx+o,cy) + at(cx,cy-o) + at(cx,cy+o))/5;
+      const gx = at(cx+g,cy) - at(cx-g,cy), gy = at(cx,cy+g) - at(cx,cy-g);
+      base[i] = (Math.abs(gx) + Math.abs(gy) > .1) ? Math.atan2(gy, gx) + Math.PI/2
+              : cov[i] > .35 ? Math.PI/4 + (Math.random()-.5)*.4 : Math.random()*Math.PI;
+      ang[i] = base[i];
+    }
+    const PI = Math.PI, ud = d => ((d % PI) + PI*1.5) % PI - PI/2;
+    const hot = ctx.createLinearGradient(0,0,W,H);
+    stops(hot);
+    let swirl = false;
+    return {
+      frame(t){
+        const p = ptr(t), R = Math.max(150, Math.min(W,H)*.3)*soft();
+        const bgP = new Path2D(), txP = new Path2D(), hP = new Path2D();
+        for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++){
+          const i = y*cols + x, cx = x*g + g/2, cy = y*g + g/2;
+          let target = base[i], k = 0;
+          if (p.on){
+            const dx = cx - p.x, dy = cy - p.y, d = Math.hypot(dx, dy);
+            k = clamp(1 - d/R, 0, 1)*p.s;
+            if (k > 0){ const fa = Math.atan2(dy, dx) + (swirl ? PI/2 : 0), kk = k*k*(3-2*k); target = base[i] + ud(fa - base[i])*kk; }
+          }
+          ang[i] += ud(target - ang[i])*.18;
+          const len = (cov[i] > .35 ? g*.9 : g*.45)*(1 + k*.6), ca = Math.cos(ang[i])*len/2, sa = Math.sin(ang[i])*len/2;
+          const path = k > .15 ? hP : cov[i] > .35 ? txP : bgP;
+          path.moveTo(cx - ca, cy - sa); path.lineTo(cx + ca, cy + sa);
+        }
+        ctx.fillStyle = '#ebe6dc'; ctx.fillRect(0,0,W,H); ctx.lineCap = 'round';
+        ctx.lineWidth = 1; ctx.strokeStyle = '#b5aea2'; ctx.stroke(bgP);
+        ctx.lineWidth = 2.2; ctx.strokeStyle = '#1a1a1a'; ctx.stroke(txP);
+        ctx.strokeStyle = hot; ctx.stroke(hP);
+      },
+      click(){ swirl = !swirl; }
+    };
+  }},
+
+  // Kacheln — Wendeplättchen, die sich beim Drüberfahren umdrehen
+  kacheln: {label:'Kacheln', isNew:true, desc:'Das Wort aus Wendeplättchen · fahr drüber und sie drehen sich um, Klicken schickt eine Welle', mount(el){
+    const {ctx, W, H} = canvasIn(el), m = mask(W, H), ts = clamp(Math.round(W/62), 10, 22);
+    const cols = Math.ceil(W/ts), rows = Math.ceil(H/ts), n = cols*rows;
+    const on = new Uint8Array(n), rot = new Float32Array(n), vel = new Float32Array(n), until = new Float64Array(n);
+    const at = (x, y) => m[clamp(y|0, 0, H-1)*W + clamp(x|0, 0, W-1)];
+    for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++){
+      const cx = x*ts + ts/2, cy = y*ts + ts/2, o = ts/4;
+      on[y*cols + x] = (at(cx,cy) + at(cx-o,cy-o) + at(cx+o,cy-o) + at(cx-o,cy+o) + at(cx+o,cy+o))/(5*255) > .45 ? 1 : 0;
+    }
+    const waves = [];
+    return {
+      frame(t){
+        const p = ptr(t), nm = now(), R = Math.max(60, Math.min(W,H)*.11)*(p.ghost ? .8 : 1)*soft();
+        for (let w = waves.length-1; w >= 0; w--){ waves[w].r += 10; if (waves[w].r > Math.hypot(W,H)) waves.splice(w,1); }
+        ctx.fillStyle = '#050505'; ctx.fillRect(0,0,W,H);
+        const fOn = new Path2D(), fOff = new Path2D(), dyn = [];
+        for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++){
+          const i = y*cols + x, cx = x*ts + ts/2, cy = y*ts + ts/2;
+          if (p.on && Math.hypot(cx - p.x, cy - p.y) < R) until[i] = nm + 900;
+          for (const w of waves) if (Math.abs(Math.hypot(cx - w.x, cy - w.y) - w.r) < ts*.8) until[i] = nm + 700;
+          const target = nm < until[i] ? Math.PI : 0;
+          vel[i] += (target - rot[i])*.09; vel[i] *= .78; rot[i] += vel[i];
+          if (Math.abs(rot[i]) < .01 && Math.abs(vel[i]) < .01){ rot[i] = 0; vel[i] = 0; (on[i] ? fOn : fOff).rect(x*ts+1, y*ts+1, ts-2, ts-2); }
+          else dyn.push(i);
+        }
+        ctx.fillStyle = '#161616'; ctx.fill(fOff);
+        ctx.fillStyle = '#f2efe8'; ctx.fill(fOn);
+        for (const i of dyn){
+          const x = i % cols, y = (i/cols)|0, c = Math.cos(rot[i]), w = (ts-2)*Math.abs(c), hue = (190 + x/cols*150)|0;
+          ctx.fillStyle = c >= 0 ? (on[i] ? '#f2efe8' : '#161616') : (on[i] ? pcs(x/cols) : pcs(x/cols, .28));
+          ctx.fillRect(x*ts + ts/2 - w/2, y*ts + 1, w, ts-2);
+          ctx.fillStyle = `rgba(0,0,0,${((1 - Math.abs(c))*.55).toFixed(2)})`;
+          ctx.fillRect(x*ts + ts/2 - w/2, y*ts + 1, w, ts-2);
+        }
+      },
+      click(x, y){ waves.push({x, y, r:0}); }
+    };
+  }},
+
+  raster: {label:'Raster', desc:'Ein Punktraster wie im Zeitungsdruck · der Cursor ist eine Lupe, Klicken pumpt sie auf', mount(el){
+    const {ctx, W, H} = canvasIn(el);
+    const g = clamp(Math.round(W/120), 7, 11), m = mask(W, H, 'Unbounded', 900, 260);
+    const cols = Math.ceil(W/g) + 1, rows = Math.ceil(H/g) + 1, cov = new Float32Array(cols*rows);
+    for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++){
+      let s = 0, n = 0;
+      for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++){
+        const X = (x*g + i*g/3)|0, Y = (y*g + j*g/3)|0;
+        if (X >= 0 && Y >= 0 && X < W && Y < H){ s += m[Y*W + X]; n++; }
+      }
+      cov[y*cols + x] = n ? s/(n*255) : 0;
+    }
+    const grad = ctx.createLinearGradient(0,0,W,0);
+    stops(grad);
+    let sx = W/2, sy = H/2, pulse = 0;
+    return {
+      frame(t){
+        const p = ptr(t);
+        if (p.on){ sx += (p.x - sx)*.2; sy += (p.y - sy)*.2; }
+        pulse *= .92;
+        const R = Math.max(130, Math.min(W,H)*.24)*(1 + pulse)*soft();
+        const bgP = new Path2D(), wP = new Path2D(), hP = new Path2D();
+        for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++){
+          const x0 = x*g, y0 = y*g, dx = x0 - sx, dy = y0 - sy, d = Math.hypot(dx, dy) + .01;
+          let k = p.on ? clamp(1 - d/R, 0, 1) : 0; k = k*k*(3-2*k)*p.s;
+          const push = k*(1-k)*g*3.2, X = x0 + dx/d*push, Y = y0 + dy/d*push, v = cov[y*cols + x];
+          const r = v > .06 ? (.25 + v*.75)*g*.5*(1 + k*.9) : .55 + k*g*.32;
+          const path = k > .12 ? hP : v > .06 ? wP : bgP;
+          path.moveTo(X + r, Y); path.arc(X, Y, r, 0, 6.2832);
+        }
+        ctx.fillStyle = '#000'; ctx.fillRect(0,0,W,H);
+        ctx.fillStyle = '#2b2b2b'; ctx.fill(bgP);
+        ctx.fillStyle = '#f4f1ea'; ctx.fill(wP);
+        ctx.fillStyle = grad; ctx.fill(hP);
+      },
+      click(){ pulse = 1.2; }
+    };
+  }},
+
+  tiefe: {label:'Tiefe', desc:'Das Wort als massiver Block · kippt mit deiner Bewegung, Klicken zieht ihn auseinander', mount(el){
+    const W = el.clientWidth, H = el.clientHeight, N = 28;
+    const scene = document.createElement('div'), rig = document.createElement('div');
+    scene.className = 'scene'; rig.className = 'rig';
+    rig.style.fontSize = Math.min(W*1.1/Math.max(4, letters().length), H*.3) + 'px';
+    const layers = [];
+    for (let i = 0; i < N; i++){
+      const d = document.createElement('div'); d.className = 'layer'; d.textContent = word;
+      const u = i/(N-1);
+      d.style.color = i === 0 ? '#fff' : pcs(u, 1 - u*.65);
+      rig.appendChild(d); layers.push(d);
+    }
+    scene.appendChild(rig); el.appendChild(scene);
+    let rx = 0, ry = 0, depth = 3, dv = 0;
+    return {
+      frame(t){
+        const p = ptr(t);
+        const bt = Math.min(boost, 1.8), tY = p.on ? (p.x/W - .5)*55*p.s*bt : 0, tX = p.on ? -(p.y/H - .45)*40*p.s*bt : 0;
+        rx += (tX - rx)*.08; ry += (tY - ry)*.08;
+        dv += (3 - depth)*.08; dv *= .82; depth += dv;
+        rig.style.transform = `rotateX(${rx.toFixed(2)}deg) rotateY(${ry.toFixed(2)}deg)`;
+        for (let i = 1; i < N; i++) layers[i].style.transform = `translateZ(${(-i*depth).toFixed(1)}px)`;
+      },
+      click(){ dv += 4; }
+    };
+  }},
+  gummi: {label:'Gummi', desc:'Die Buchstaben werden dick und breit, wo du bist · Klicken lässt alle anschwellen', mount(el){
+    const W = el.clientWidth, H = el.clientHeight, box = document.createElement('div');
+    box.className = 'gummi';
+    box.style.fontSize = Math.min(W*1.3/Math.max(4, letters().length), H*.36) + 'px';
+    const L = letters().map(ch => {
+      const s = document.createElement('span'); s.textContent = ch === ' ' ? ' ' : ch;
+      box.appendChild(s); return {s, t:0};
+    });
+    el.appendChild(box);
+    return {
+      frame(t){
+        const p = ptr(t), R = Math.max(140, Math.min(W,H)*.32)*soft();
+        for (const l of L){
+          const r = l.s.getBoundingClientRect(), cx = r.left + r.width/2, cy = r.top + r.height/2;
+          let k = p.on ? clamp(1 - Math.hypot(p.x-cx, (p.y-cy)*.7)/R, 0, 1) : 0;
+          k = k*k*(3-2*k)*p.s;
+          l.t += (k - l.t)*.14;
+          l.s.style.fontVariationSettings = `"wght" ${(120 + 880*l.t)|0}, "wdth" ${(30 + 121*l.t)|0}`;
+          l.s.style.color = l.t < .02 ? '#fff' : toWhite(pc(cx/W), l.t);
+        }
+      },
+      click(){ for (const l of L) l.t = 1; }
+    };
+  }},
+
+  ascii: {label:'ASCII', desc:'Das Wort aus Zeichen · unter dem Cursor beginnt der Code zu rauschen, Klicken schickt eine Welle', mount(el){
+    const {ctx, W, H} = canvasIn(el);
+    const ch = clamp(Math.round(W/95), 9, 15), cw = ch*.62;
+    const cols = Math.floor(W/cw), rows = Math.floor(H/ch), m = mask(W, H, 'Unbounded', 900, 260);
+    const cov = new Float32Array(cols*rows), glyph = new Array(cols*rows).fill('');
+    for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++){
+      let s = 0;
+      for (let j = 0; j < 3; j++) for (let i = 0; i < 3; i++){
+        const X = Math.min(W-1, (x*cw + cw*(i+.5)/3)|0), Y = Math.min(H-1, (y*ch + ch*(j+.5)/3)|0);
+        s += m[Y*W + X];
+      }
+      cov[y*cols + x] = s/(9*255);
+    }
+    const RAMP = ' .:-=+*#%@', G = '01<>/\\|=+*#%@$&?!{}[]';
+    const waves = [], bg = [], hot = [];
+    return {
+      frame(t){
+        const p = ptr(t), R = Math.max(120, Math.min(W,H)*.22)*soft();
+        for (let w = waves.length-1; w >= 0; w--){ waves[w].r += 9; waves[w].s *= .97; if (waves[w].s < .05) waves.splice(w,1); }
+        ctx.fillStyle = '#000'; ctx.fillRect(0,0,W,H);
+        ctx.font = `500 ${ch}px "JetBrains Mono", monospace`; ctx.textBaseline = 'top';
+        ctx.fillStyle = '#f2f2f2'; bg.length = 0; hot.length = 0;
+        const step = (t*6)|0;
+        for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++){
+          const i = y*cols + x, cx = x*cw + cw/2, cy = y*ch + ch/2, v = cov[i];
+          let k = 0;
+          if (p.on){ const d = Math.hypot(cx-p.x, cy-p.y); if (d < R) k = (1 - d/R)*p.s; }
+          for (const w of waves){ const g = Math.abs(Math.hypot(cx-w.x, cy-w.y) - w.r); if (g < 40) k = Math.max(k, (1 - g/40)*w.s); }
+          if (k > .05 && (v > .08 || Math.random() < k*.35)){
+            if (!glyph[i] || Math.random() < .25) glyph[i] = G[(Math.random()*G.length)|0];
+            hot.push(i, k);
+          } else if (v > .08){
+            ctx.fillText(RAMP[Math.min(9, 1 + ((v*8.99)|0))], x*cw, y*ch);
+          } else if ((x*7 + y*13 + step) % 29 === 0) bg.push(i);
+        }
+        ctx.fillStyle = '#2e2e2e';
+        for (const i of bg) ctx.fillText('.', (i % cols)*cw, ((i/cols)|0)*ch);
+        for (let n = 0; n < hot.length; n += 2){
+          const i = hot[n], k = hot[n+1];
+          ctx.fillStyle = toWhite(pc((i % cols)/cols), 1 - k*.35);
+          ctx.fillText(glyph[i], (i % cols)*cw, ((i/cols)|0)*ch);
+        }
+      },
+      click(x, y){ waves.push({x, y, r:0, s:1}); }
+    };
+  }},
+
+  glitch: {label:'Glitch', desc:'Buchstaben entschlüsseln sich · schnelle Bewegungen verzerren das Signal, Klicken mischt neu', mount(el){
+    const W = el.clientWidth, H = el.clientHeight, box = document.createElement('div');
+    box.className = 'glitch';
+    box.style.fontSize = Math.min(W*1.55/Math.max(4, letters().length), H*.32) + 'px';
+    const GL = '!<>-_\\/[]{}=+*^?#ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    const start = now();
+    const L = letters().map((ch, i) => {
+      const s = document.createElement('span'); s.textContent = ch === ' ' ? ' ' : ch;
+      box.appendChild(s); return {s, ch:s.textContent, until:start + 350 + i*90, swap:0};
+    });
+    el.appendChild(box);
+    let speed = 0, jitterUntil = 0;
+    return {
+      frame(t){
+        const p = ptr(t), n = now();
+        speed = Math.max(speed*.9, P.on ? Math.hypot(P.vx, P.vy) : 0);
+        for (const l of L){
+          if (l.ch === ' ') continue;
+          if (p.on && (!p.ghost || Math.random() < .03)){
+            const r = l.s.getBoundingClientRect();
+            if (Math.abs(p.x - r.left - r.width/2) < r.width*.6 && Math.abs(p.y - r.top - r.height/2) < r.height*.6 && n > l.until - 150) l.until = n + 380;
+          }
+          if (n < l.until){
+            if (n - l.swap > 55){ l.s.textContent = GL[(Math.random()*GL.length)|0]; l.swap = n; }
+            l.s.className = 'on'; l.s.style.color = pcs(.5);
+          } else if (l.s.textContent !== l.ch){ l.s.textContent = l.ch; l.s.className = ''; l.s.style.color = ''; }
+        }
+        const off = Math.min(24, speed*.35*boost);
+        box.style.textShadow = off > .3 ? `${off.toFixed(1)}px 0 ${pcs(0)}, ${(-off).toFixed(1)}px 0 ${pcs(1)}` : 'none';
+        if (!reduce && n > jitterUntil){
+          if (Math.random() < .008){
+            jitterUntil = n + 110;
+            box.style.transform = `translateX(${(Math.random()*16 - 8)|0}px) skewX(${(Math.random()*8 - 4)|0}deg)`;
+          } else if (box.style.transform) box.style.transform = '';
+        }
+      },
+      click(){ const n = now(); L.forEach((l, i) => l.until = n + 200 + i*70); speed = 30; }
+    };
+  }}
+};
+
+const KEYS = ['partikel','wasser','raster','tiefe','glas','relief','licht','magnet','kacheln','gummi','ascii','glitch'];
+let cur = null, curKey = KEYS[0];
+tabs.innerHTML = KEYS.map(k => `<button type="button" class="tab" role="tab" data-k="${k}" aria-selected="false">${EFFECTS[k].label}</button>`).join('');
+
+function mount(key, fromUser){
+  if (!EFFECTS[key]) key = EFFECTS[CONFIG.stil] ? CONFIG.stil : KEYS[0];
+  curKey = key; stage.innerHTML = '';
+  cur = stage.clientWidth && stage.clientHeight ? EFFECTS[key].mount(stage) : null;
+  desc.textContent = EFFECTS[key].desc;
+  tabs.querySelectorAll('.tab').forEach(b => b.setAttribute('aria-selected', b.dataset.k === key));
+  if (fromUser && location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+}
+function loop(){
+  requestAnimationFrame(loop);
+  P.vx *= .85; P.vy *= .85;
+  if (cur) cur.frame(now()/1000);
+}
+
+// Eingaben
+stage.addEventListener('pointermove', e => {
+  if (!P.on && e.pointerType !== 'mouse') return;
+  if (P.x > -1e3){ P.vx = e.clientX - P.x; P.vy = e.clientY - P.y; }
+  P.x = e.clientX; P.y = e.clientY; P.on = true; P.last = now();
+});
+stage.addEventListener('pointerdown', e => {
+  P.x = e.clientX; P.y = e.clientY; P.vx = P.vy = 0; P.on = true; P.last = now();
+  if (cur && cur.click) cur.click(e.clientX, e.clientY);
+});
+const off = () => { P.on = false; P.x = -1e4; };
+stage.addEventListener('pointerleave', off);
+stage.addEventListener('pointercancel', off);
+stage.addEventListener('pointerup', e => { if (e.pointerType !== 'mouse') off(); });
+
+tabs.addEventListener('click', e => { const b = e.target.closest('.tab'); if (b) mount(b.dataset.k, true); });
+const chips = $('#chips'), boostIn = $('#boost'), boostOut = $('#boostOut'), bar = $('#bar');
+chips.innerHTML = Object.entries(PALETTES).map(([k, c]) =>
+  `<button type="button" class="chip" data-p="${k}" aria-pressed="${k === pal}" aria-label="Farben ${k}" title="${k}"><span style="background:linear-gradient(135deg,${c.map(x => `rgb(${x})`).join(',')})"></span></button>`).join('');
+chips.addEventListener('click', e => {
+  const b = e.target.closest('.chip'); if (!b) return;
+  pal = b.dataset.p; chips.querySelectorAll('.chip').forEach(c => c.setAttribute('aria-pressed', c === b));
+  mount(curKey);
+});
+boostIn.value = boost;
+const showBoost = () => { boost = +boostIn.value; boostOut.textContent = boost.toFixed(1) + '×'; };
+boostIn.addEventListener('input', showBoost); showBoost();
+if (!CONFIG.bedienleiste) bar.style.display = 'none';
+if (!CONFIG.worteingabe) $('#f').style.display = 'none';
+input.value = word;
+stage.addEventListener('pointerdown', () => bar.classList.add('quiet'));
+stage.addEventListener('pointermove', e => { if (e.pointerType === 'mouse') bar.classList.add('quiet'); });
+addEventListener('keydown', e => {
+  if (e.target === input || e.target === boostIn) return;
+  const i = KEYS.indexOf(curKey);
+  if (e.key === 'ArrowRight') mount(KEYS[(i+1) % KEYS.length], true);
+  if (e.key === 'ArrowLeft') mount(KEYS[(i-1+KEYS.length) % KEYS.length], true);
+});
+$('#f').addEventListener('submit', e => {
+  e.preventDefault();
+  const v = input.value.trim(); if (!v) { input.value = word; return; }
+  word = v; mount(curKey); input.blur();
+});
+addEventListener('hashchange', () => { const h = location.hash.slice(1); if (h !== curKey && EFFECTS[h]) mount(h); });
+let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => mount(curKey), 150); });
+
+// Erst Schriften laden, sonst zeichnen die Canvas-Effekte mit der Ersatzschrift
+const fonts = document.fonts ? Promise.all(['900 100px Unbounded', '800 100px "JetBrains Mono"', '500 16px "JetBrains Mono"', '400 100px "Roboto Flex"'].map(f => document.fonts.load(f))) : Promise.resolve();
+fonts.catch(() => {}).then(() => { mount(location.hash.slice(1)); loop(); });
+}
+</script>
+</body>
+</html>
